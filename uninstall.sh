@@ -25,7 +25,7 @@ fi
 # ------------------------
 echo -e "${GREEN}============================================================================${NC}"
 echo -e "${GREEN}   GenieACS Auto Uninstaller${NC}"
-echo -e "${GREEN}   This will REMOVE GenieACS, MongoDB, Node.js, and Nginx completely.${NC}"
+echo -e "${GREEN}   This will REMOVE GenieACS, MongoDB (with DB data), Node.js, and Nginx.${NC}"
 echo -e "${GREEN}============================================================================${NC}"
 echo -e "${YELLOW}Do you really want to continue? (y/n)${NC}"
 read confirmation
@@ -64,6 +64,13 @@ apt-get autoremove -y
 apt-get clean
 
 # ------------------------
+# Remove DB Files and Logs
+# ------------------------
+echo -e "${YELLOW}Removing MongoDB data and logs...${NC}"
+rm -rf /var/lib/mongodb \
+       /var/log/mongodb
+
+# ------------------------
 # Remove Config Files and Logs
 # ------------------------
 echo -e "${YELLOW}Removing GenieACS files and configs...${NC}"
@@ -87,5 +94,5 @@ systemctl daemon-reload
 # Final Message
 # ------------------------
 echo -e "${GREEN}============================================================================${NC}"
-echo -e "${GREEN} GenieACS, MongoDB (DB dropped), Node.js, and Nginx have been completely removed.${NC}"
+echo -e "${GREEN} GenieACS, MongoDB (with DB data), Node.js, and Nginx have been completely removed.${NC}"
 echo -e "${GREEN}============================================================================${NC}"
