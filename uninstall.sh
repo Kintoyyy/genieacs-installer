@@ -36,6 +36,18 @@ if [[ ! "$confirmation" =~ ^[Yy]$ ]]; then
 fi
 
 # ------------------------
+# Drop GenieACS MongoDB Database
+# ------------------------
+echo -e "${YELLOW}Dropping GenieACS MongoDB database...${NC}"
+if command -v mongo >/dev/null 2>&1; then
+    mongo genieacs --eval "db.dropDatabase()" || true
+elif command -v mongosh >/dev/null 2>&1; then
+    mongosh genieacs --eval "db.dropDatabase()" || true
+else
+    echo -e "${RED}Mongo client not found, skipping DB drop.${NC}"
+fi
+
+# ------------------------
 # Stop and Disable Services
 # ------------------------
 echo -e "${YELLOW}Stopping services...${NC}"
@@ -75,5 +87,5 @@ systemctl daemon-reload
 # Final Message
 # ------------------------
 echo -e "${GREEN}============================================================================${NC}"
-echo -e "${GREEN} GenieACS, MongoDB, Node.js, and Nginx have been completely removed.${NC}"
+echo -e "${GREEN} GenieACS, MongoDB (DB dropped), Node.js, and Nginx have been completely removed.${NC}"
 echo -e "${GREEN}============================================================================${NC}"
