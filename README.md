@@ -30,7 +30,7 @@ It also sets up firewall rules and systemd services so everything runs out of th
 One-liner install:
 
 ```bash
-bash <(curl -s https://raw.githubusercontent.com/Kintoyyy/genieacs-installer/main/install.sh)
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/Kintoyyy/genieacs-installer/main/install.sh)"
 ```
 
 Or clone and run manually:
@@ -65,14 +65,7 @@ After installation, open:
 To completely remove GenieACS, MongoDB, and Nginx:
 
 ```bash
-sudo systemctl stop genieacs-{cwmp,nbi,fs,ui} mongod nginx
-sudo systemctl disable genieacs-{cwmp,nbi,fs,ui} mongod nginx
-
-sudo apt-get purge -y genieacs mongodb-org* nginx nodejs
-sudo apt-get autoremove -y
-sudo rm -rf /opt/genieacs /var/log/genieacs /etc/systemd/system/genieacs-*.service
-sudo rm -rf /etc/nginx/sites-available/genieacs /etc/nginx/sites-enabled/genieacs
-sudo systemctl daemon-reload
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/Kintoyyy/genieacs-installer/main/uninstall.sh)"
 ```
 
 This will remove installed packages, systemd services, and logs/config files.

@@ -32,7 +32,7 @@ echo -e "${GREEN}/ / __/ _ \/ __ \/ / _ \/ /| |/ /    \__ \                     
 echo -e "${GREEN}/ /_/ /  __/ / / / /  __/ ___ / /___ ___/ /                                 ${NC}"
 echo -e "${GREEN}\____/\___/_/ /_/_/\___/_/  |_\____//____/                                  ${NC}"
 echo -e "${GREEN}======================= GenieACS Auto Installer ============================${NC}"
-echo -e "${GREEN}         By Kintoyyy - https://github.com/Kintoyyy/genieacs                ${NC}"
+echo -e "${GREEN}      By Kintoyyy - https://github.com/Kintoyyy/genieacs-installer          ${NC}"
 echo -e "${GREEN}============================================================================${NC}"
 echo -e "${GREEN}Do you want to continue? (y/n)${NC}"
 read confirmation
