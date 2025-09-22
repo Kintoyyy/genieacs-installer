@@ -20,6 +20,26 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
+# ------------------------
+# Disk Space Check Function
+# ------------------------
+check_disk_space() {
+  REQUIRED_SPACE_MB=$1
+  AVAILABLE_SPACE_MB=$(df --output=avail / | tail -n 1)
+  AVAILABLE_SPACE_MB=$((AVAILABLE_SPACE_MB / 1024))
+
+  if [ "$AVAILABLE_SPACE_MB" -lt "$REQUIRED_SPACE_MB" ]; then
+    echo -e "${RED}Error: Not enough disk space on root filesystem.${NC}"
+    echo -e "${YELLOW}Available: ${AVAILABLE_SPACE_MB} MB, Required: ${REQUIRED_SPACE_MB} MB${NC}"
+    echo -e "${RED}Please free up space before running this installer.${NC}"
+    exit 1
+  else
+    echo -e "${GREEN}Disk space check passed: ${AVAILABLE_SPACE_MB} MB available.${NC}"
+  fi
+}
+
+check_disk_space 1024
+
 local_ip=$(hostname -I | awk '{print $1}')
 
 # ------------------------
@@ -114,7 +134,10 @@ fi
 # MongoDB Installation (Community Edition 8.0)
 # ------------------------
 if ! $MONGO_RUNNING; then
-    echo -e "${YELLOW}Installing MongoDB 8.0...${RESET}"
+    # Extra disk space check before MongoDB (require at least 8 GB free)
+    check_disk_space 8192
+
+    echo -e "${YELLOW}Cleaning old MongoDB packages (if any)...${RESET}"
     apt-get purge -y mongodb-org* || true
     rm -f /etc/apt/sources.list.d/mongodb-org-*.list
     rm -f /usr/share/keyrings/mongodb-server-*.gpg
@@ -139,6 +162,7 @@ if ! $MONGO_RUNNING; then
     apt-get update
     apt-get install -y mongodb-org
     systemctl enable --now mongod
+    mongo --eval 'db.runCommand({ connectionStatus: 1 })' || true
 else
     echo -e "${GREEN}MongoDB is already installed and running.${NC}"
 fi
