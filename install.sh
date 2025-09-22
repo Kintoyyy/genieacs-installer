@@ -42,6 +42,31 @@ if [[ ! "$confirmation" =~ ^[Yy]$ ]]; then
     exit 1
 fi
 
+# ------------------------
+# Service Selection
+# ------------------------
+echo -e "${YELLOW}Select which GenieACS services to enable:${NC}"
+
+echo -e "  UI (Port 3000 via Nginx 80, required)"
+echo -e "     → Web interface for managing devices and configuration."
+echo
+echo -e "  CWMP (Port 7547)"
+echo -e "     → Handles TR-069 / CWMP communication between ACS and CPE devices."
+echo
+echo -e "  NBI (Port 7557)"
+echo -e "     → REST API for integrating GenieACS with OSS/BSS (external systems)."
+echo
+echo -e "  FS (Port 7567)"
+echo -e "     → File server for firmware, scripts, and provisioning files."
+echo
+
+read -p "Enable CWMP? (y/n) [y]: " enable_cwmp
+read -p "Enable NBI? (y/n) [n]: " enable_nbi
+read -p "Enable FS? (y/n) [y]: " enable_fs
+
+enable_cwmp=$(echo "${enable_cwmp:-y}" | tr '[:upper:]' '[:lower:]')
+enable_nbi=$(echo "${enable_nbi:-n}" | tr '[:upper:]' '[:lower:]')
+enable_fs=$(echo "${enable_fs:-y}" | tr '[:upper:]' '[:lower:]')
 
 # ------------------------
 # Fix Broken Dependencies
@@ -58,7 +83,6 @@ apt-get clean
 # ------------------------
 NODE_INSTALLED=false
 MONGO_RUNNING=false
-GENIEACS_RUNNING=false
 NGINX_RUNNING=false
 
 if command -v node >/dev/null 2>&1; then
@@ -67,10 +91,6 @@ fi
 
 if systemctl is-active --quiet mongod; then
     MONGO_RUNNING=true
-fi
-
-if systemctl is-active --quiet genieacs-cwmp; then
-    GENIEACS_RUNNING=true
 fi
 
 if systemctl is-active --quiet nginx; then
@@ -94,19 +114,17 @@ fi
 # MongoDB Installation (Community Edition 8.0)
 # ------------------------
 if ! $MONGO_RUNNING; then
-    echo -e "${YELLOW}Cleaning old MongoDB packages (if any)...${RESET}"
+    echo -e "${YELLOW}Installing MongoDB 8.0...${RESET}"
     apt-get purge -y mongodb-org* || true
     rm -f /etc/apt/sources.list.d/mongodb-org-*.list
     rm -f /usr/share/keyrings/mongodb-server-*.gpg
     apt-get update
     apt-get install -y gnupg curl
 
-    # Import MongoDB GPG key
     curl -fsSL https://www.mongodb.org/static/pgp/server-8.0.asc | \
        gpg -o /usr/share/keyrings/mongodb-server-8.0.gpg --dearmor
 
     UBUNTU_VERSION=$(lsb_release -cs)
-
     case "$UBUNTU_VERSION" in
       noble|jammy|focal)
         MONGO_REPO="deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] https://repo.mongodb.org/apt/ubuntu $UBUNTU_VERSION/mongodb-org/8.0 multiverse"
@@ -121,7 +139,6 @@ if ! $MONGO_RUNNING; then
     apt-get update
     apt-get install -y mongodb-org
     systemctl enable --now mongod
-    mongo --eval 'db.runCommand({ connectionStatus: 1 })' || true
 else
     echo -e "${GREEN}MongoDB is already installed and running.${NC}"
 fi
@@ -129,16 +146,15 @@ fi
 # ------------------------
 # GenieACS Installation
 # ------------------------
-if ! $GENIEACS_RUNNING; then
-    echo -e "${YELLOW}Installing GenieACS...${RESET}"
-    npm install -g genieacs@1.2.13
-    useradd --system --no-create-home --user-group genieacs || true
+echo -e "${YELLOW}Installing GenieACS...${RESET}"
+npm install -g genieacs@1.2.13
+useradd --system --no-create-home --user-group genieacs || true
 
-    mkdir -p /opt/genieacs/ext
-    mkdir -p /var/log/genieacs
-    chown -R genieacs:genieacs /opt/genieacs /var/log/genieacs
+mkdir -p /opt/genieacs/ext
+mkdir -p /var/log/genieacs
+chown -R genieacs:genieacs /opt/genieacs /var/log/genieacs
 
-    cat << EOF > /opt/genieacs/genieacs.env
+cat << EOF > /opt/genieacs/genieacs.env
 GENIEACS_CWMP_ACCESS_LOG_FILE=/var/log/genieacs/genieacs-cwmp-access.log
 GENIEACS_NBI_ACCESS_LOG_FILE=/var/log/genieacs/genieacs-nbi-access.log
 GENIEACS_FS_ACCESS_LOG_FILE=/var/log/genieacs/genieacs-fs-access.log
@@ -148,11 +164,12 @@ GENIEACS_EXT_DIR=/opt/genieacs/ext
 GENIEACS_UI_JWT_SECRET=secret
 EOF
 
-    chown genieacs:genieacs /opt/genieacs/genieacs.env
-    chmod 600 /opt/genieacs/genieacs.env
+chown genieacs:genieacs /opt/genieacs/genieacs.env
+chmod 600 /opt/genieacs/genieacs.env
 
-    for svc in cwmp nbi fs ui; do
-        cat << EOF > /etc/systemd/system/genieacs-$svc.service
+# Create systemd services (but only enable chosen)
+for svc in cwmp nbi fs ui; do
+    cat << EOF > /etc/systemd/system/genieacs-$svc.service
 [Unit]
 Description=GenieACS $svc
 After=network.target
@@ -165,33 +182,22 @@ ExecStart=/usr/bin/genieacs-$svc
 [Install]
 WantedBy=multi-user.target
 EOF
-    done
+done
 
-    cat << EOF > /etc/logrotate.d/genieacs
-/var/log/genieacs/*.log /var/log/genieacs/*.yaml {
-    daily
-    rotate 30
-    compress
-    delaycompress
-    dateext
-}
-EOF
+systemctl daemon-reload
+systemctl enable --now genieacs-ui
 
-    systemctl daemon-reload
-    systemctl enable --now genieacs-{cwmp,nbi,fs,ui}
-else
-    echo -e "${GREEN}GenieACS is already installed and running.${NC}"
-fi
+[[ "$enable_cwmp" == "y" ]] && systemctl enable --now genieacs-cwmp
+[[ "$enable_nbi" == "y" ]] && systemctl enable --now genieacs-nbi
+[[ "$enable_fs" == "y" ]] && systemctl enable --now genieacs-fs
 
 # ------------------------
 # Nginx Installation
 # ------------------------
 if ! $NGINX_RUNNING; then
     echo -e "${YELLOW}Installing Nginx...${RESET}"
-    apt-get install -y nginx || apt-get install -f -y nginx
-    systemctl enable --now nginx || true
-
-    mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
+    apt-get install -y nginx
+    systemctl enable --now nginx
 
     cat << EOF > /etc/nginx/sites-available/genieacs
 server {
@@ -214,8 +220,6 @@ EOF
     ln -sf /etc/nginx/sites-available/genieacs /etc/nginx/sites-enabled/genieacs
     rm -f /etc/nginx/sites-enabled/default
     systemctl restart nginx
-else
-    echo -e "${GREEN}Nginx is already installed and running.${NC}"
 fi
 
 # ------------------------
@@ -225,28 +229,10 @@ echo -e "${YELLOW}Configuring UFW firewall...${RESET}"
 apt-get install -y ufw
 ufw allow 80/tcp
 ufw allow 443/tcp
-ufw allow 7547/tcp
-ufw allow 7557/tcp
-ufw allow 7567/tcp
+[[ "$enable_cwmp" == "y" ]] && ufw allow 7547/tcp
+[[ "$enable_nbi" == "y" ]] && ufw allow 7557/tcp
+[[ "$enable_fs" == "y" ]] && ufw allow 7567/tcp
 ufw --force enable
-
-# ------------------------
-# Restart Services
-# ------------------------
-echo -e "${YELLOW}Restarting all services...${NC}"
-
-services_to_restart=("mongod" "genieacs-cwmp" "genieacs-nbi" "genieacs-fs" "genieacs-ui" "nginx")
-
-for svc in "${services_to_restart[@]}"; do
-    if systemctl is-active --quiet "$svc"; then
-        systemctl restart "$svc"
-        echo -e "${GREEN}$svc restarted successfully.${NC}"
-    else
-        echo -e "${YELLOW}$svc is not running, skipping restart.${NC}"
-    fi
-done
-
-echo -e "${GREEN}All services have been restarted.${NC}"
 
 # ------------------------
 # Final Info
@@ -256,8 +242,7 @@ echo -e "${GREEN} GenieACS installation completed successfully!${NC}"
 echo -e "${GREEN} UI:     http://$local_ip${NC}"
 echo -e "${GREEN} USER:   admin${NC}"
 echo -e "${GREEN} PASS:   admin${NC}"
-echo -e "${GREEN}                  ${NC}"
-echo -e "${GREEN} CWMP:   Port 7547${NC}"
-echo -e "${GREEN} NBI:    Port 7557${NC}"
-echo -e "${GREEN} FS:     Port 7567${NC}"
+[[ "$enable_cwmp" == "y" ]] && echo -e "${GREEN} CWMP:   Port 7547${NC}"
+[[ "$enable_nbi" == "y" ]] && echo -e "${GREEN} NBI:    Port 7557${NC}"
+[[ "$enable_fs" == "y" ]] && echo -e "${GREEN} FS:     Port 7567${NC}"
 echo -e "${GREEN}============================================================================${NC}"
